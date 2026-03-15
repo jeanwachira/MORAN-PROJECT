@@ -1,0 +1,285 @@
+/* Reset root styles for Dhahabu Themanini Moran Theme */
+#root {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(to bottom right, #FEF3C7, #FFEDD5, #FED7AA);
+}
+
+/* Ensure body and html take full height with Moran gradient */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Logo styles with Moran theme */
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+  filter: drop-shadow(0 0 1em rgba(212, 175, 55, 0.5));
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em rgba(212, 175, 55, 0.8));
+}
+
+.logo.moran:hover {
+  filter: drop-shadow(0 0 2em rgba(204, 119, 34, 0.8));
+}
+
+/* Golden spin animation for Moran branding */
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+/* Card styles with Moran aesthetic */
+.card {
+  padding: 2em;
+  background: linear-gradient(to bottom right, #FFFFFF, #FEF3C7);
+  border: 2px solid #F59E0B;
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.2);
+  transition: all 300ms ease;
+}
+
+.card:hover {
+  box-shadow: 0 15px 40px rgba(212, 175, 55, 0.3);
+  transform: translateY(-4px);
+}
+
+/* Enhanced documentation text */
+.read-the-docs {
+  color: #A0522D;
+  font-weight: 500;
+}
+
+/* Moran Theme Specific Components */
+
+/* Golden Button */
+.btn-golden {
+  background: linear-gradient(135deg, #D4AF37 0%, #CC7722 100%);
+  color: white;
+  border: 2px solid #B8941F;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 300ms ease;
+  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+}
+
+.btn-golden:hover {
+  background: linear-gradient(135deg, #B8941F 0%, #A0522D 100%);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-golden:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+}
+
+/* Cultural Badge */
+.badge-cultural {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #C41E3A 0%, #CC7722 100%);
+  color: white;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(196, 30, 58, 0.3);
+}
+
+/* Earth Tone Card */
+.card-earth {
+  background: linear-gradient(135deg, #F4E4C1 0%, #FFFFFF 100%);
+  border: 2px solid #D4704A;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 8px 25px rgba(212, 112, 74, 0.2);
+  transition: all 300ms ease;
+}
+
+.card-earth:hover {
+  box-shadow: 0 12px 35px rgba(212, 112, 74, 0.3);
+  transform: translateY(-3px);
+}
+
+/* Status Indicator */
+.status-active {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: #10B981;
+  border-radius: 50%;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.status-pending {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: #F59E0B;
+  border-radius: 50%;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+/* Decorative Pattern Overlay */
+.pattern-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.pattern-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 35px,
+    rgba(212, 175, 55, 0.05) 35px,
+    rgba(212, 175, 55, 0.05) 70px
+  );
+  pointer-events: none;
+}
+
+/* Shimmer Effect for Loading */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.shimmer {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(
+    to right,
+    #F3F4F6 0%,
+    #FEF3C7 20%,
+    #F3F4F6 40%,
+    #F3F4F6 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FEF3C7;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #D4AF37 0%, #CC7722 100%);
+  border-radius: 10px;
+  border: 2px solid #FEF3C7;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #B8941F 0%, #A0522D 100%);
+}
+
+/* Focus States */
+*:focus {
+  outline: 2px solid #D4AF37;
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Selection Colors */
+::selection {
+  background: #D4AF37;
+  color: white;
+}
+
+::-moz-selection {
+  background: #D4AF37;
+  color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .card {
+    padding: 1.5em;
+  }
+  
+  .btn-golden {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  #root {
+    background: white;
+  }
+  
+  .btn-golden,
+  .badge-cultural {
+    background: white !important;
+    color: black !important;
+    border: 1px solid black !important;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .card {
+    border-width: 3px;
+  }
+  
+  .btn-golden {
+    border-width: 3px;
+  }
+}

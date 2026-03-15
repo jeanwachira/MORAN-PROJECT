@@ -3,13 +3,20 @@ const Parents = require('../models/Parents');
 // Create a new parent
 exports.createParent = async (req, res) => {
     try {
-        const { parent, name, phone, email, mentee } = req.body;
+        const { parent, name, phone, email, profession, residence, mentee } = req.body;
+
+        // Add validation
+        if (!profession || !residence) {
+            return res.status(400).json({ error: 'Profession and residence are required' });
+        }
 
         const newParent = new Parents({
             parent,
             name,
             phone,
             email,
+            profession,  // Added
+            residence,   // Added
             mentee
         });
 
@@ -17,7 +24,7 @@ exports.createParent = async (req, res) => {
         res.status(201).json(newParent);
     } catch (error) {
         console.error('Error creating parent:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
 };
 

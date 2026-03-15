@@ -11,32 +11,25 @@ const UserSchema = new mongoose.Schema({
     },
     password: { 
         type: String, 
-        required: true,
+        required: function() {
+            return !this.googleId; // Only required if not using Google
+        },
         minlength: 6
     },
     name: {
         type: String,
         required: true
     },
-    isVerified: {
-        type: Boolean,
-        default: false
+    // ADD THESE FIELDS:
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true
     },
-    verificationToken: {
+    profilePicture: {
         type: String
     },
-    verificationTokenExpiry: {
-        type: Date
-    },
-    resetPasswordToken: {
-        type: String
-    },
-    resetPasswordExpiry: {
-        type: Date
-    }
-}, {
-    timestamps: true
-});
+}, {timestamps: true});
 
 // Hash password before saving
 UserSchema.pre('save', async function(next) {

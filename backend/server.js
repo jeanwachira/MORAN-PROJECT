@@ -1,12 +1,21 @@
 const cors = require('cors');
 const express = require('express');
+const passport = require('passport');
 const connectDB = require('./config/db');
 require('dotenv').config();
 
+// Initialize Express app FIRST
 const app = express();
+
+// Then apply middleware to the app
 app.use(cors());
 app.use(express.json());
 
+// Initialize Passport
+app.use(passport.initialize());
+require('./config/passport');
+
+// Connect to database
 connectDB();
 
 // Import routes
@@ -28,11 +37,6 @@ app.use('/api/service-providers', serviceProviderRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/activities', activityRoutes);
-
-// Health check route
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', message: 'Server is running' });
-});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

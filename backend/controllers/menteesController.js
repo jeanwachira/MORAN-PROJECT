@@ -1,13 +1,39 @@
 const Mentee = require('../models/Mentees');
-const Parents = require('../models/Parents');
 const { logActivity } = require('./activityController');
 
 // Create a new mentee
 exports.createMentee = async (req, res) => {
     try {
-        const { name, cohort, email, dob, schoolSystem, grade, phone, school, parents, procedure, doctorName, doctorEmail } = req.body;
+        const { 
+            admissionNumber, // Can be provided or auto-generated
+            name, 
+            cohort, 
+            email, 
+            dob, 
+            schoolSystem, 
+            grade, 
+            phone, 
+            school, 
+            parents, 
+            procedure, 
+            doctorName, 
+            doctorEmail 
+        } = req.body;
+
+        // Check if admission number already exists (if provided)
+        if (admissionNumber) {
+            const existing = await Mentee.findOne({ 
+                admissionNumber: admissionNumber.toUpperCase() 
+            });
+            if (existing) {
+                return res.status(400).json({ 
+                    error: 'Admission number already exists' 
+                });
+            }
+        }
 
         const newMentee = new Mentee({
+            admissionNumber: admissionNumber?.toUpperCase(),
             name,
             cohort,
             email,
@@ -27,11 +53,11 @@ exports.createMentee = async (req, res) => {
         // Log activity
         await logActivity(
             'mentee_created',
-            `New mentee added: ${name}`,
+            `New mentee added: ${name} (${newMentee.admissionNumber})`,
             'Mentee',
             newMentee._id,
             name,
-            req.user?.name // If you have user authentication
+            req.user?.name
         );
         
         res.status(201).json(newMentee);
@@ -149,6 +175,63 @@ exports.addMenteeProfilePic = async (req, res) => {
         res.json(mentee);
     } catch (error) {
         console.error('Error adding profile picture to mentee:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Search mentee by admission number
+exports.searchByAdmissionNumber = async (req, res) => {
+    try {
+        const { admissionNumber } = req.params;
+        
+        const mentee = await Mentee.findOne({ 
+            admissionNumber: admissionNumber.toUpperCase() 
+        })
+        .populate('parents')
+        .populate('cohort');
+        
+        if (!mentee) {
+            return res.status(404).json({ error: 'Mentee not found with this admission number' });
+        }
+        
+        res.json(mentee);
+    } catch (error) {
+        console.error('Error searching mentee by admission number:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get complete profile including activities
+exports.getMenteeCompleteProfile = async (req, res) => {
+    try {
+        const { admissionNumber } = req.params;
+        
+        const mentee = await Mentee.findOne({ 
+            admissionNumber: admissionNumber.toUpperCase() 
+        })
+        .populate('parents')
+        .populate('cohort');
+        
+        if (!mentee) {
+            return res.status(404).json({ error: 'Mentee not found' });
+        }
+        
+        // Get all activities related to this mentee
+        const Activity = require('../models/Activity');
+        const activities = await Activity.find({ 
+            entityType: 'Mentee',
+            entityId: mentee._id 
+        })
+        .sort({ createdAt: -1 })
+        .limit(50);
+        
+        res.json({
+            mentee,
+            activities,
+            totalActivities: activities.length
+        });
+    } catch (error) {
+        console.error('Error fetching complete mentee profile:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

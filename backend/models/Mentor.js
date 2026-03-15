@@ -6,6 +6,6 @@ const MentorSchema = new mongoose.Schema({
     contactEmail: { type: String, required: true },
     phone: { type: String, required: true },
     profilepic: { type: String },
-})
+}, {timestamps: true})
 
 module.exports = mongoose.model('Mentor', MentorSchema);
