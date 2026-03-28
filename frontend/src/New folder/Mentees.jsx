@@ -63,9 +63,7 @@ export default function Mentees() {
     const [importRows, setImportRows] = useState([]);
     const [importErrors, setImportErrors] = useState([]);
     const [importing, setImporting] = useState(false);
-    const [importDone, setImportDone] = useState(null);
-    const [importProgress, setImportProgress] = useState({ step: '', current: 0, total: 0 });
-    const [importSheetData, setImportSheetData] = useState({ cohorts: [], parents: [], mentees: [] });
+    const [importDone, setImportDone] = useState(null); // { success, failed }
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCohort, setFilterCohort] = useState('all');
     const [filterYear, setFilterYear] = useState('all');
@@ -86,222 +84,184 @@ export default function Mentees() {
         return data.secure_url;
     };
 
-    // ── Master Excel import ──────────────────────────────────────────────────
+    // ── Excel import ─────────────────────────────────────────────────────────
+    const TEMPLATE_COLS = ['name','email','phone','dob','schoolSystem','grade','school','procedure','doctorName','doctorEmail'];
 
-    const downloadTemplate = async () => {
-        const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
-        const wb = XLSX.utils.book_new();
-        const sheets = [
-            {
-                name: 'Cohorts',
-                rows: [
-                    ['riika', 'year', 'residence', 'startDate', 'endDate'],
-                    ['BARAKOA', 2024, 'Nairobi', '2024-01-15', '2024-12-15'],
-                    ['THEMANINI', 2025, 'Kiambu', '2025-02-01', '2025-11-30'],
-                ]
-            },
-            {
-                name: 'Parents',
-                rows: [
-                    ['parent', 'name', 'phone', 'email', 'profession', 'residence', 'mentee'],
-                    ['Father', 'John Kamau', '0712345678', 'john@email.com', 'Engineer', 'Nairobi', 'Gabriel Kamau'],
-                    ['Mother', 'Grace Wanjiru', '0733000002', 'grace@email.com', 'Teacher', 'Kiambu', 'Gabriel Kamau'],
-                    ['Guardian', 'Uncle Peter', '0744000003', 'peter@email.com', 'Business', 'Thika', ''],
-                ]
-            },
-            {
-                name: 'Mentees',
-                rows: [
-                    ['name', 'email', 'phone', 'dob', 'schoolSystem', 'grade', 'school', 'procedure', 'doctorName', 'doctorEmail', 'programType', 'cohort', 'parents'],
-                    ['Gabriel Kamau', 'gabriel@email.com', '0786990432', '2008-03-15', '8-4-4', 'Form 2', 'Strathmore High', 'Medical notes here', 'Dr. Kamau', 'drkamau@hospital.com', 'circumcision_and_mentorship', 'BARAKOA 2024', 'John Kamau, Grace Wanjiru'],
-                    ['Alex Mwangi', 'alex@email.com', '0722000005', '2009-07-10', 'CBC', 'Grade 7', 'Nairobi School', 'Medical notes here', 'Dr. Otieno', 'otieno@hospital.com', 'mentorship_only', 'BARAKOA 2024', 'Grace Wanjiru'],
-                ]
-            },
-        ];
-        sheets.forEach(({ name, rows }) => {
-            const ws = XLSX.utils.aoa_to_sheet(rows);
-            ws['!cols'] = rows[0].map(() => ({ wch: 24 }));
-            XLSX.utils.book_append_sheet(wb, ws, name);
-        });
-        XLSX.writeFile(wb, 'Dhahabu_Mentees_Import_Template.xlsx');
-    };
-
-    const normalizeKey = (k) => k?.toString().trim().toLowerCase().replace(/[\s_\-]+/g, '');
-
-    const parseSheet = (data, requiredCols) => {
-        const rows = []; const errors = [];
-        data.forEach((row, i) => {
-            const norm = {};
-            Object.keys(row).forEach(k => { norm[normalizeKey(k)] = row[k]?.toString().trim(); });
-            const missing = requiredCols.filter(c => !norm[normalizeKey(c)]);
-            if (missing.length) { errors.push(`Row ${i+2}: missing ${missing.join(', ')}`); }
-            else rows.push({ ...norm, _rowNum: i+2 });
-        });
-        return { rows, errors };
+    const downloadTemplate = () => {
+        const header = TEMPLATE_COLS.join(',');
+        const example = 'John Doe,john@email.com,+254712345678,2008-03-15,8-4-4,Form 2,Nairobi School,Circumcision,Dr. Kamau,drkamau@hospital.com';
+        const csv = `${header}\n${example}`;
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'mentees_template.csv'; a.click();
+        URL.revokeObjectURL(url);
     };
 
     const handleFileUpload = async (file) => {
         if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
         setImportErrors([]); setImportRows([]); setImportDone(null);
-        setImportSheetData({ cohorts: [], parents: [], mentees: [] });
         try {
-            const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
-            const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-
-            // Find sheets by name (case-insensitive partial match)
-            const findSheet = (keyword) => {
-                const name = wb.SheetNames.find(n => n.toLowerCase().includes(keyword.toLowerCase()));
-                if (!name) return [];
-                return XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
-            };
-
-            const cohortData  = findSheet('cohort');
-            const parentData  = findSheet('parent');
-            const menteeData  = findSheet('mentee');
-
-            const allErrors = [];
-            let cohortRows = [], parentRows = [], menteeRows = [];
-
-            if (cohortData.length) {
-                const r = parseSheet(cohortData, TEMPLATE_COLS.cohorts);
-                cohortRows = r.rows; allErrors.push(...r.errors.map(e => `[Cohorts] ${e}`));
+            let rows = [];
+            if (ext === 'csv') {
+                const text = await file.text();
+                const lines = text.trim().split('\n').filter(Boolean);
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g,''));
+                rows = lines.slice(1).map((line, i) => {
+                    const vals = line.split(',').map(v => v.trim());
+                    const row = {};
+                    headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+                    row._rowNum = i + 2;
+                    return row;
+                });
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+                rows = data.map((r, i) => {
+                    const norm = {};
+                    Object.keys(r).forEach(k => { norm[k.trim().toLowerCase().replace(/\s+/g,'')] = String(r[k]).trim(); });
+                    norm._rowNum = i + 2;
+                    return norm;
+                });
+            } else {
+                setImportErrors(['Please upload a .csv, .xlsx or .xls file']); return;
             }
-            if (parentData.length) {
-                const r = parseSheet(parentData, TEMPLATE_COLS.parents);
-                parentRows = r.rows; allErrors.push(...r.errors.map(e => `[Parents] ${e}`));
-            }
-            if (menteeData.length) {
-                const r = parseSheet(menteeData, TEMPLATE_COLS.mentees);
-                menteeRows = r.rows; allErrors.push(...r.errors.map(e => `[Mentees] ${e}`));
-            }
-
-            if (!cohortRows.length && !parentRows.length && !menteeRows.length) {
-                setImportErrors(['No valid data found. Make sure your sheets are named Cohorts, Parents and Mentees.']); return;
-            }
-
-            setImportSheetData({ cohorts: cohortRows, parents: parentRows, mentees: menteeRows });
-            setImportErrors(allErrors);
-        } catch(e) {
-            console.error(e);
-            setImportErrors(['Failed to parse file. Please use a .xlsx file with the correct sheet names.']);
+            // Validate rows
+            const required = ['name','email','phone','dob','schoolsystem','grade','school','procedure','doctorname','doctoremail'];
+            const validRows = []; const errors = [];
+            rows.forEach(row => {
+                const missing = required.filter(f => !row[f]);
+                if (missing.length) {
+                    errors.push(`Row ${row._rowNum}: missing ${missing.join(', ')}`);
+                } else {
+                    validRows.push({
+                        name: row.name, email: row.email, phone: row.phone,
+                        dob: row.dob, schoolSystem: row.schoolsystem || row['schoolsystem'] || row['school system'],
+                        grade: row.grade, school: row.school,
+                        procedure: row.procedure, doctorName: row.doctorname || row['doctorname'],
+                        doctorEmail: row.doctoremail || row['doctoremail'],
+                        _rowNum: row._rowNum
+                    });
+                }
+            });
+            setImportRows(validRows); setImportErrors(errors);
+        } catch (e) {
+            console.error(e); setImportErrors(['Failed to parse file. Please check the format.']);
         }
     };
 
     const handleImportSubmit = async () => {
-        const { cohorts: cohortRows, parents: parentRows, mentees: menteeRows } = importSheetData;
-        if (!cohortRows.length && !parentRows.length && !menteeRows.length) return;
-
+        if (!importRows.length) return;
         setImporting(true);
-        let totalSuccess = 0, totalFailed = 0;
-
-        // ── Step 1: Cohorts ───────────────────────────────────────────────────
-        const cohortMap = {}; // "RIIKA-YEAR" -> _id
-        if (cohortRows.length) {
-            setImportProgress({ step: 'Cohorts', current: 0, total: cohortRows.length });
-            // Pre-load existing cohorts
+        let success = 0, failed = 0;
+        for (const row of importRows) {
             try {
-                const existing = await API.get('/cohorts');
-                existing.data.forEach(c => { cohortMap[`${c.riika}-${c.year}`] = c._id; });
-            } catch {}
-
-            for (let i = 0; i < cohortRows.length; i++) {
-                const row = cohortRows[i];
-                setImportProgress({ step: 'Cohorts', current: i+1, total: cohortRows.length });
-                const key = `${row[normalizeKey('riika')]}-${row[normalizeKey('year')]}`;
-                if (cohortMap[key]) { totalSuccess++; continue; } // already exists
-                try {
-                    const res = await API.post('/cohorts', {
-                        riika: row[normalizeKey('riika')],
-                        year: parseInt(row[normalizeKey('year')]),
-                        residence: row[normalizeKey('residence')],
-                        startDate: row[normalizeKey('startdate')] || row[normalizeKey('startDate')],
-                        endDate: row[normalizeKey('enddate')] || row[normalizeKey('endDate')],
-                    });
-                    cohortMap[key] = res.data._id;
-                    totalSuccess++;
-                } catch { totalFailed++; }
-            }
+                const { _rowNum, ...data } = row;
+                // Assign first cohort if only one exists, else leave empty for manual assignment
+                const payload = { ...data, parents: [] };
+                if (cohorts.length === 1) payload.cohort = cohorts[0]._id;
+                const res = await API.post('/mentees', payload);
+                setMentees(prev => [...prev, res.data]);
+                success++;
+            } catch { failed++; }
         }
-
-        // ── Step 2: Parents ───────────────────────────────────────────────────
-        const parentMap = {}; // email -> _id
-        if (parentRows.length) {
-            setImportProgress({ step: 'Parents', current: 0, total: parentRows.length });
-            try {
-                const existing = await API.get('/parents');
-                existing.data.forEach(p => { parentMap[p.email?.toLowerCase()] = p._id; });
-            } catch {}
-
-            for (let i = 0; i < parentRows.length; i++) {
-                const row = parentRows[i];
-                setImportProgress({ step: 'Parents', current: i+1, total: parentRows.length });
-                const email = row[normalizeKey('email')]?.toLowerCase();
-                if (parentMap[email]) { totalSuccess++; continue; }
-                try {
-                    const res = await API.post('/parents', {
-                        parent: row[normalizeKey('parent')],
-                        name: row[normalizeKey('name')],
-                        phone: row[normalizeKey('phone')],
-                        email,
-                        profession: row[normalizeKey('profession')],
-                        residence: row[normalizeKey('residence')],
-                        mentee: [], // will link after mentees created
-                    });
-                    parentMap[email] = res.data._id;
-                    totalSuccess++;
-                } catch { totalFailed++; }
-            }
-        }
-
-        // ── Step 3: Mentees ───────────────────────────────────────────────────
-        if (menteeRows.length) {
-            setImportProgress({ step: 'Mentees', current: 0, total: menteeRows.length });
-
-            for (let i = 0; i < menteeRows.length; i++) {
-                const row = menteeRows[i];
-                setImportProgress({ step: 'Mentees', current: i+1, total: menteeRows.length });
-
-                // Resolve cohort
-                const riikaKey = `${row[normalizeKey('cohortriika')] || row[normalizeKey('cohortRiika')]}-${row[normalizeKey('cohortyear')] || row[normalizeKey('cohortYear')]}`;
-                const cohortId = cohortMap[riikaKey] || (cohorts.length === 1 ? cohorts[0]._id : null);
-
-                // Resolve parents from parentRows by menteeName match
-                const linkedParentIds = parentRows
-                    .filter(p => p[normalizeKey('menteename')]?.toLowerCase() === row[normalizeKey('name')]?.toLowerCase())
-                    .map(p => parentMap[p[normalizeKey('email')]?.toLowerCase()])
-                    .filter(Boolean);
-
-                try {
-                    const res = await API.post('/mentees', {
-                        name: row[normalizeKey('name')],
-                        email: row[normalizeKey('email')],
-                        phone: row[normalizeKey('phone')],
-                        dob: row[normalizeKey('dob')],
-                        schoolSystem: row[normalizeKey('schoolsystem')] || row[normalizeKey('schoolSystem')],
-                        grade: row[normalizeKey('grade')],
-                        school: row[normalizeKey('school')],
-                        procedure: row[normalizeKey('procedure')],
-                        doctorName: row[normalizeKey('doctorname')] || row[normalizeKey('doctorName')],
-                        doctorEmail: row[normalizeKey('doctoremail')] || row[normalizeKey('doctorEmail')],
-                        cohort: cohortId || undefined,
-                        parents: linkedParentIds,
-                    });
-                    setMentees(prev => [...prev, res.data]);
-                    totalSuccess++;
-                } catch { totalFailed++; }
-            }
-        }
-
-        setImportDone({ success: totalSuccess, failed: totalFailed });
+        setImportDone({ success, failed });
         setImporting(false);
-        if (totalFailed === 0) setTimeout(() => { setImportOpen(false); resetImport(); }, 2500);
+        if (failed === 0) setTimeout(() => { setImportOpen(false); setImportRows([]); setImportDone(null); }, 2000);
     };
 
-    const resetImport = () => {
-        setImportRows([]); setImportErrors([]); setImportDone(null);
-        setImportProgress({ step: '', current: 0, total: 0 });
-        setImportSheetData({ cohorts: [], parents: [], mentees: [] });
+    // ── PDF Export ───────────────────────────────────────────────────────────
+    const exportMenteePDF = async (mentee) => {
+        // Fetch full profile with populated parents and cohort
+        let full = mentee;
+        try {
+            const res = await API.get(`/mentees/${mentee._id}`);
+            full = res.data;
+        } catch(e) { /* use existing data */ }
+
+        const dob = full.dob ? new Date(full.dob).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : 'N/A';
+        const age = full.dob ? (() => { const b=new Date(full.dob),t=new Date(); let a=t.getFullYear()-b.getFullYear(); if(t.getMonth()<b.getMonth()||(t.getMonth()===b.getMonth()&&t.getDate()<b.getDate())) a--; return a; })() : '';
+        const cohortName = full.cohort?.riika ? `${full.cohort.riika} — ${full.cohort.year}` : 'N/A';
+        const parentsList = Array.isArray(full.parents) && full.parents.length
+            ? full.parents.map(p => typeof p === 'object' ? `${p.name} (${p.parent}) — ${p.phone}` : p).join(', ')
+            : 'N/A';
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,serif}
+            body{background:#fff;color:#1a1a1a;padding:40px;max-width:800px;margin:0 auto}
+            .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:24px;border-bottom:3px solid #B8975A;margin-bottom:28px}
+            .org{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#1a1a1a}
+            .sub{font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#B8975A;margin-top:4px}
+            .admission{text-align:right}
+            .adm-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#999}
+            .adm-num{font-size:18px;font-weight:900;color:#B8975A;font-family:monospace;margin-top:2px}
+            .name-block{margin-bottom:28px;padding:20px 24px;background:#faf8f5;border-left:4px solid #B8975A;border-radius:0 12px 12px 0}
+            .name{font-size:26px;font-weight:900;color:#1a1a1a;letter-spacing:-0.5px}
+            .badges{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+            .badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(184,151,90,0.12);color:#B8975A;border:1px solid rgba(184,151,90,0.3)}
+            .section{margin-bottom:24px}
+            .sec-title{font-size:9px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#B8975A;border-bottom:1px solid rgba(184,151,90,0.2);padding-bottom:6px;margin-bottom:14px}
+            .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px}
+            .field label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#999;display:block;margin-bottom:3px}
+            .field span{font-size:13px;font-weight:600;color:#1a1a1a}
+            .full{grid-column:1/-1}
+            .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10px;color:#aaa}
+        </style></head><body>
+        <div class="header">
+            <div><div class="org">DHAHABU</div><div class="sub">Management System — Mentee Profile</div></div>
+            <div class="admission"><div class="adm-label">Admission No.</div><div class="adm-num">${full.admissionNumber || 'PENDING'}</div></div>
+        </div>
+        <div class="name-block">
+            <div class="name">${full.name}</div>
+            <div class="badges">
+                <span class="badge">${full.schoolSystem}</span>
+                <span class="badge">Grade ${full.grade}</span>
+                ${age ? `<span class="badge">${age} years old</span>` : ''}
+            </div>
+        </div>
+        <div class="section">
+            <div class="sec-title">Personal Information</div>
+            <div class="grid">
+                <div class="field"><label>Email</label><span>${full.email}</span></div>
+                <div class="field"><label>Phone</label><span>${full.phone}</span></div>
+                <div class="field"><label>Date of Birth</label><span>${dob}</span></div>
+                <div class="field"><label>Cohort</label><span>${cohortName}</span></div>
+            </div>
+        </div>
+        <div class="section">
+            <div class="sec-title">School Information</div>
+            <div class="grid">
+                <div class="field"><label>School</label><span>${full.school}</span></div>
+                <div class="field"><label>School System</label><span>${full.schoolSystem}</span></div>
+                <div class="field"><label>Grade / Form</label><span>${full.grade}</span></div>
+            </div>
+        </div>
+        <div class="section">
+            <div class="sec-title">Medical Information</div>
+            <div class="grid">
+                <div class="field full"><label>Procedure</label><span>${full.procedure}</span></div>
+                <div class="field"><label>Doctor</label><span>${full.doctorName}</span></div>
+                <div class="field"><label>Doctor Email</label><span>${full.doctorEmail}</span></div>
+            </div>
+        </div>
+        <div class="section">
+            <div class="sec-title">Parents / Guardians</div>
+            <div class="grid"><div class="field full"><label>Linked Parents</label><span>${parentsList}</span></div></div>
+        </div>
+        <div class="footer">
+            <span>Generated ${new Date().toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })}</span>
+            <span>DHAHABU Management — Confidential</span>
+        </div>
+        </body></html>`;
+
+        const win = window.open('', '_blank');
+        win.document.write(html);
+        win.document.close();
+        win.onload = () => { win.print(); };
     };
 
     const handleProfilePicUpload = async (menteeId, file) => {
@@ -323,7 +283,7 @@ export default function Mentees() {
     const [newMentee, setNewMentee] = useState({
         name: '', cohort: '', email: '', dob: '', schoolSystem: '8-4-4',
         grade: '', phone: '', school: '', parents: [], procedure: '',
-        doctorName: '', doctorEmail: '', profilepic: '', programType: 'mentorship_only'
+        doctorName: '', doctorEmail: '', profilepic: ''
     });
 
     useEffect(() => {
@@ -353,7 +313,7 @@ export default function Mentees() {
                 parents: Array.isArray(newMentee.parents) ? newMentee.parents : [newMentee.parents]
             });
             setMentees([...mentees, response.data]);
-            setNewMentee({ name:'',cohort:'',email:'',dob:'',schoolSystem:'8-4-4',grade:'',phone:'',school:'',parents:[],procedure:'',doctorName:'',doctorEmail:'',profilepic:'',programType:'mentorship_only' });
+            setNewMentee({ name:'',cohort:'',email:'',dob:'',schoolSystem:'8-4-4',grade:'',phone:'',school:'',parents:[],procedure:'',doctorName:'',doctorEmail:'',profilepic:'' });
             setOpen(false);
         } catch (error) { console.error(error); alert('Error adding mentee. Please try again.'); }
     };
@@ -485,7 +445,7 @@ export default function Mentees() {
 
     return (
         <div className="py-2">
-            <PageHeader title="Candidates" subtitle="Manage and track all mentees in the program"
+            <PageHeader title="Moran" subtitle="Manage and track all morans in the program"
                 onAdd={() => setOpen(true)} addLabel="Add Candidate" onImport={() => setImportOpen(true)} />
 
             {/* ── Search & Filter Bar ──────────────────────────────────────── */}
@@ -636,12 +596,6 @@ export default function Mentees() {
                                     style={{ backgroundColor: 'rgba(184,151,90,0.1)', color: GOLD }}>
                                     {mentee.schoolSystem}
                                 </span>
-                                {mentee.programType && (
-                                    <span className="text-xs font-black px-2 py-0.5 rounded-full"
-                                        style={{ backgroundColor: mentee.programType === 'circumcision_and_mentorship' ? 'rgba(96,165,250,0.1)' : 'rgba(134,239,172,0.1)', color: mentee.programType === 'circumcision_and_mentorship' ? '#60a5fa' : '#22c55e' }}>
-                                        {mentee.programType === 'circumcision_and_mentorship' ? 'Circ+Mentor' : 'Mentor Only'}
-                                    </span>
-                                )}
                                 <span className="text-xs text-stone-400 font-semibold">{mentee.schoolSystem === '8-4-4' ? 'Form' : 'Grade'} {mentee.grade}</span>
                                 <span className="text-xs text-stone-400 font-semibold">· {calculateAge(mentee.dob)} yrs</span>
                             </div>
@@ -764,29 +718,6 @@ export default function Mentees() {
                             <div className="space-y-1.5">
                                 <Label className={labelClass}>Doctor Email *</Label>
                                 <Input name="doctorEmail" type="email" placeholder="Enter doctor's email" value={newMentee.doctorEmail} onChange={handleInputChange} className={inputClass} />
-                            </div>
-
-                            <div className="md:col-span-2 mt-3">
-                                <p className={sectionClass} style={{ borderBottom: `2px solid ${GOLD}`, paddingBottom: '8px' }}>Program & Billing</p>
-                            </div>
-                            <div className="space-y-1.5 md:col-span-2">
-                                <Label className={labelClass}>Program Type *</Label>
-                                <Select value={newMentee.programType} onValueChange={v => handleSelectChange('programType', v)}>
-                                    <SelectTrigger className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#B8975A] hover:border-[#B8975A] transition-colors">
-                                        <SelectValue placeholder="Select program type" />
-                                    </SelectTrigger>
-                                    <SelectContent className="z-50 rounded-xl border border-stone-200 bg-white shadow-lg text-sm p-1">
-                                        <SelectItem className="rounded-lg px-3 py-2 cursor-pointer hover:bg-amber-50 text-stone-800 font-medium" value="circumcision_and_mentorship">
-                                            Circumcision & Mentorship — KSh 150,000
-                                        </SelectItem>
-                                        <SelectItem className="rounded-lg px-3 py-2 cursor-pointer hover:bg-amber-50 text-stone-800 font-medium" value="mentorship_only">
-                                            Mentorship Only — KSh 125,000
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-[10px] text-stone-400 font-semibold mt-1">
-                                    Payment record will be auto-created for cohorts starting July 2026 or later.
-                                </p>
                             </div>
 
                             <div className="md:col-span-2 mt-3">
@@ -989,51 +920,35 @@ export default function Mentees() {
                 </Dialog>
             )}
 
-            {/* ── Master Import Dialog ─────────────────────────────────────────── */}
-            <Dialog open={importOpen} onOpenChange={v => { setImportOpen(v); if (!v) resetImport(); }}>
+            {/* ── Import Excel Dialog ──────────────────────────────────────────── */}
+            <Dialog open={importOpen} onOpenChange={v => { setImportOpen(v); if (!v) { setImportRows([]); setImportErrors([]); setImportDone(null); } }}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl border border-stone-100 shadow-2xl p-0">
                     <div className="h-1 w-full rounded-t-3xl" style={{ background: `linear-gradient(to right, ${GOLD}, #D4B88C)` }} />
                     <div className="p-8">
                         <DialogHeader className="mb-2">
-                            <DialogTitle className="text-2xl font-black tracking-tighter text-stone-900">Master Excel Import</DialogTitle>
-                            <DialogDescription className="text-stone-400">Import cohorts, parents and mentees all at once from a single Excel file.</DialogDescription>
+                            <DialogTitle className="text-2xl font-black tracking-tighter text-stone-900">Import Mentees from Excel</DialogTitle>
+                            <DialogDescription className="text-stone-400">Upload a .csv or .xlsx file to bulk-add mentees. Download the template to ensure correct formatting.</DialogDescription>
                         </DialogHeader>
 
-                        {/* How it works */}
-                        <div className="mt-4 rounded-2xl p-4 space-y-2" style={{ backgroundColor: 'rgba(184,151,90,0.05)', border: '1px solid rgba(184,151,90,0.15)' }}>
-                            <p className="text-xs font-black text-stone-700 mb-2">Your Excel file needs 3 sheets:</p>
-                            {[
-                                { sheet: 'Sheet 1 — Cohorts', cols: 'riika, year, residence, startDate, endDate', color: '#a78bfa' },
-                                { sheet: 'Sheet 2 — Parents', cols: 'parent, name, phone, email, profession, residence, menteeName', color: '#f472b6' },
-                                { sheet: 'Sheet 3 — Mentees', cols: 'name, email, phone, dob, schoolSystem, grade, school, procedure, doctorName, doctorEmail, cohortRiika, cohortYear', color: GOLD },
-                            ].map((s, i) => (
-                                <div key={i} className="flex items-start gap-2">
-                                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: s.color }} />
-                                    <div>
-                                        <p className="text-xs font-black text-stone-700">{s.sheet}</p>
-                                        <p className="text-[10px] text-stone-400 font-mono mt-0.5">{s.cols}</p>
-                                    </div>
-                                </div>
-                            ))}
-                            <button onClick={downloadTemplate}
-                                className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-xl text-xs font-black border border-stone-200 bg-white hover:bg-stone-50 transition-colors">
-                                <FileDown className="h-3.5 w-3.5" style={{ color: GOLD }} />
-                                Download Template Guide
-                            </button>
-                        </div>
+                        {/* Template download */}
+                        <button onClick={downloadTemplate}
+                            className="flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-xs font-black border border-stone-200 hover:bg-stone-50 transition-colors">
+                            <FileDown className="h-3.5 w-3.5" style={{ color: GOLD }} />
+                            Download Template (.csv)
+                        </button>
 
                         {/* Drop zone */}
-                        {!importSheetData.cohorts.length && !importSheetData.parents.length && !importSheetData.mentees.length && !importDone && (
+                        {!importRows.length && !importDone && (
                             <label className="mt-5 flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl p-10 cursor-pointer transition-colors hover:bg-amber-50/40"
                                 style={{ borderColor: 'rgba(184,151,90,0.3)' }}>
                                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: 'rgba(184,151,90,0.08)' }}>
                                     <Upload className="h-6 w-6" style={{ color: GOLD }} />
                                 </div>
                                 <div className="text-center">
-                                    <p className="font-black text-stone-700 text-sm">Drop your .xlsx file here or click to browse</p>
-                                    <p className="text-xs text-stone-400 mt-1">Must be an Excel file (.xlsx) with the 3 sheets</p>
+                                    <p className="font-black text-stone-700 text-sm">Drop your file here or click to browse</p>
+                                    <p className="text-xs text-stone-400 mt-1">Supports .csv, .xlsx, .xls</p>
                                 </div>
-                                <input type="file" accept=".xlsx,.xls" className="hidden"
+                                <input type="file" accept=".csv,.xlsx,.xls" className="hidden"
                                     onChange={e => handleFileUpload(e.target.files[0])} />
                             </label>
                         )}
@@ -1043,7 +958,7 @@ export default function Mentees() {
                             <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-4">
                                 <div className="flex items-center gap-2 mb-2">
                                     <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                                    <p className="text-xs font-black text-red-600">{importErrors.length} issue(s) found — affected rows will be skipped:</p>
+                                    <p className="text-xs font-black text-red-600">{importErrors.length} row(s) have issues and will be skipped:</p>
                                 </div>
                                 <ul className="space-y-1 max-h-24 overflow-y-auto">
                                     {importErrors.map((e, i) => <li key={i} className="text-xs text-red-500 font-medium">{e}</li>)}
@@ -1051,102 +966,70 @@ export default function Mentees() {
                             </div>
                         )}
 
-                        {/* Sheet previews */}
-                        {(importSheetData.cohorts.length > 0 || importSheetData.parents.length > 0 || importSheetData.mentees.length > 0) && !importDone && !importing && (
-                            <div className="mt-5 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-sm font-black text-stone-800">Ready to import:</p>
-                                    <button onClick={resetImport} className="text-xs font-black text-stone-400 hover:text-stone-600 flex items-center gap-1">
+                        {/* Preview table */}
+                        {importRows.length > 0 && !importDone && (
+                            <div className="mt-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-sm font-black text-stone-800">
+                                        <span className="text-emerald-500">{importRows.length}</span> valid row{importRows.length > 1 ? 's' : ''} ready to import
+                                    </p>
+                                    <button onClick={() => { setImportRows([]); setImportErrors([]); }}
+                                        className="text-xs font-black text-stone-400 hover:text-stone-600 flex items-center gap-1">
                                         <X className="h-3 w-3" /> Clear
                                     </button>
                                 </div>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { label: 'Cohorts', count: importSheetData.cohorts.length, color: '#a78bfa' },
-                                        { label: 'Parents', count: importSheetData.parents.length, color: '#f472b6' },
-                                        { label: 'Mentees', count: importSheetData.mentees.length, color: GOLD },
-                                    ].map((s, i) => (
-                                        <div key={i} className="rounded-2xl p-4 text-center border border-stone-100 bg-stone-50">
-                                            <p className="text-2xl font-black" style={{ color: s.color }}>{s.count}</p>
-                                            <p className="text-xs font-black text-stone-500 mt-1">{s.label}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                                {/* Mentee preview table */}
-                                {importSheetData.mentees.length > 0 && (
-                                    <div className="rounded-2xl border border-stone-100 overflow-hidden">
-                                        <p className="text-[10px] font-black tracking-widest uppercase text-stone-400 px-3 py-2 bg-stone-50">Mentees Preview</p>
-                                        <div className="overflow-x-auto max-h-40 overflow-y-auto">
-                                            <table className="w-full text-xs">
-                                                <thead className="sticky top-0 bg-stone-50">
-                                                    <tr>{['Name','System','Grade/Form','School','Cohort'].map(h => (
-                                                        <th key={h} className="px-3 py-2 text-left font-black text-stone-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                                                    ))}</tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-stone-50">
-                                                    {importSheetData.mentees.map((row, i) => (
-                                                        <tr key={i} className="hover:bg-stone-50">
-                                                            <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{row['name'] || row['name']}</td>
-                                                            <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row['schoolsystem']}</td>
-                                                            <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row['grade']}</td>
-                                                            <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row['school']}</td>
-                                                            <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row['cohortriika']} {row['cohortyear']}</td>
-                                                        </tr>
+                                <div className="rounded-2xl border border-stone-100 overflow-hidden">
+                                    <div className="overflow-x-auto max-h-52 overflow-y-auto">
+                                        <table className="w-full text-xs">
+                                            <thead className="sticky top-0 bg-stone-50">
+                                                <tr>
+                                                    {['Name','Email','Phone','DOB','System','Grade','School'].map(h => (
+                                                        <th key={h} className="px-3 py-2 text-left font-black text-stone-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                                                     ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-stone-50">
+                                                {importRows.map((row, i) => (
+                                                    <tr key={i} className="hover:bg-stone-50">
+                                                        <td className="px-3 py-2 font-semibold text-stone-800 whitespace-nowrap">{row.name}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.email}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.phone}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.dob}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.schoolSystem}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.grade}</td>
+                                                        <td className="px-3 py-2 text-stone-500 whitespace-nowrap">{row.school}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Import progress */}
-                        {importing && importProgress.step && (
-                            <div className="mt-5 rounded-2xl p-5" style={{ backgroundColor: 'rgba(184,151,90,0.05)', border: '1px solid rgba(184,151,90,0.15)' }}>
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-sm font-black text-stone-800">Importing {importProgress.step}...</p>
-                                    <p className="text-xs font-black text-stone-400">{importProgress.current} / {importProgress.total}</p>
-                                </div>
-                                <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
-                                    <div className="h-full rounded-full transition-all duration-300"
-                                        style={{ width: `${importProgress.total ? (importProgress.current/importProgress.total)*100 : 0}%`, background: `linear-gradient(to right, ${GOLD}, #D4B88C)` }} />
-                                </div>
-                                <div className="flex gap-4 mt-3">
-                                    {['Cohorts','Parents','Mentees'].map((s, i) => (
-                                        <div key={i} className="flex items-center gap-1.5">
-                                            <div className="w-2 h-2 rounded-full"
-                                                style={{ backgroundColor: importProgress.step === s ? GOLD : importProgress.step === 'Mentees' && i < 2 || importProgress.step === 'Parents' && i < 1 ? '#34d399' : 'rgba(0,0,0,0.1)' }} />
-                                            <span className="text-xs font-semibold text-stone-400">{s}</span>
-                                        </div>
-                                    ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* Done state */}
+                        {/* Success state */}
                         {importDone && (
                             <div className="mt-5 rounded-2xl p-6 text-center" style={{ backgroundColor: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
                                 <CheckCircle className="h-10 w-10 mx-auto mb-3 text-emerald-400" />
                                 <p className="font-black text-stone-900">Import Complete</p>
                                 <p className="text-sm text-stone-500 mt-1">
-                                    <span className="text-emerald-500 font-black">{importDone.success} records processed</span>
-                                    {importDone.failed > 0 && <span className="text-red-400 font-black ml-2">· {importDone.failed} failed</span>}
+                                    <span className="text-emerald-500 font-black">{importDone.success} added</span>
+                                    {importDone.failed > 0 && <span className="text-red-400 font-black ml-2">{importDone.failed} failed</span>}
                                 </p>
                             </div>
                         )}
 
                         <DialogFooter className="mt-6 gap-3">
-                            <button onClick={() => { setImportOpen(false); resetImport(); }}
+                            <button onClick={() => { setImportOpen(false); setImportRows([]); setImportErrors([]); setImportDone(null); }}
                                 className="px-5 py-2.5 rounded-2xl font-black text-sm text-stone-600 border border-stone-200 hover:bg-stone-50 transition-all">
                                 {importDone ? 'Close' : 'Cancel'}
                             </button>
-                            {(importSheetData.cohorts.length > 0 || importSheetData.parents.length > 0 || importSheetData.mentees.length > 0) && !importDone && (
+                            {importRows.length > 0 && !importDone && (
                                 <button onClick={handleImportSubmit} disabled={importing}
                                     className="px-6 py-2.5 rounded-2xl font-black text-sm text-black shadow-lg transition-all hover:opacity-90 flex items-center gap-2"
                                     style={{ background: `linear-gradient(135deg, ${GOLD}, #D4B88C)` }}>
                                     {importing && <Loader2 className="h-3 w-3 animate-spin" />}
-                                    {importing ? 'Importing...' : `Import All Data`}
+                                    {importing ? `Importing...` : `Import ${importRows.length} Mentee${importRows.length > 1 ? 's' : ''}`}
                                 </button>
                             )}
                         </DialogFooter>

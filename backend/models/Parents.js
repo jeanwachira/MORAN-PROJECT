@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const ParentsSchema = new mongoose.Schema({
     parent: { 
         type: String, 
-        enum: ['Father', 'Mother'], 
+        enum: ['Father', 'Mother', 'Guardian'], 
         required: [true, 'Parent type is required']
     },
     name: { 
@@ -17,9 +17,9 @@ const ParentsSchema = new mongoose.Schema({
         trim: true,
         validate: {
             validator: function(v) {
-                return /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/im.test(v);
+                return /^(\+?254|0)[17]\d{8}$/.test(v.replace(/[\s\-().]/g, ''));
             },
-            message: props => `${props.value} is not a valid phone number!`
+            message: props => `${props.value} is not a valid Kenyan phone number! Use 07XX XXX XXX or +2547XX XXX XXX`
         }
     },
     profession: { 
@@ -60,8 +60,6 @@ const ParentsSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Index for faster queries - only add index for parent field
-// email index is already created by unique: true
 ParentsSchema.index({ parent: 1 });
 
 module.exports = mongoose.model('Parents', ParentsSchema);

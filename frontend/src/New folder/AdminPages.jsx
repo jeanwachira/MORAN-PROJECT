@@ -20,7 +20,6 @@ import ServiceProviders from "./ServiceProviders";
 import Events from "./Events";
 import Parents from "./Parents";
 import Payments from "./Payments";
-import BulkImport from "./BulkImport";
 import logo from '../logo/logo.png';
 import API from '@/api';
 
@@ -192,7 +191,7 @@ export default function AdminPages() {
 
   const menuItems = [
     { label: "Overview", icon: LayoutDashboard, path: "dashboard" },
-    { label: "Morans", icon: Users, path: "mentees" },
+    { label: "Candidate Mentees", icon: Users, path: "mentees" },
     { label: "Parents", icon: Heart, path: "parents" },
     { label: "Mentors", icon: UserCircle, path: "mentors" },
     { label: "Cohorts", icon: Users, path: "cohort" },
@@ -557,9 +556,6 @@ export default function AdminPages() {
             </div>
           </main>
         </div>
-
-        {/* Floating Bulk Import — visible on all pages */}
-        <BulkImport />
 
         <style>{`
           ::-webkit-scrollbar { width: 5px; }

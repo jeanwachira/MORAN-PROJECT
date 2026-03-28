@@ -1,18 +1,20 @@
 const ServiceProvider = require('../models/ServiceProvider');
+const { logActivity } = require('./activityController');
 
 // Create a new Service Provider
 exports.createServiceProvider = async (req, res) => {
     try {
         const { name, serviceType, contactEmail, phone } = req.body;
 
-        const newServiceProvider = new ServiceProvider({
-            name,
-            serviceType,
-            contactEmail,
-            phone
-        });
-
+        const newServiceProvider = new ServiceProvider({ name, serviceType, contactEmail, phone });
         await newServiceProvider.save();
+
+        await logActivity(
+            'service_provider_created',
+            `New service provider added: ${name} (${serviceType})`,
+            'ServiceProvider', newServiceProvider._id, name, req.user?.name
+        );
+
         res.status(201).json(newServiceProvider);
     } catch (error) {
         console.error('Error creating service provider:', error);
@@ -27,9 +29,14 @@ exports.editServiceProvider = async (req, res) => {
         const updates = req.body;
 
         const serviceProvider = await ServiceProvider.findByIdAndUpdate(serviceProviderId, updates, { new: true });
-        if (!serviceProvider) {
-            return res.status(404).json({ error: 'Service Provider not found' });
-        }
+        if (!serviceProvider) return res.status(404).json({ error: 'Service Provider not found' });
+
+        await logActivity(
+            'service_provider_updated',
+            `Service provider updated: ${serviceProvider.name}`,
+            'ServiceProvider', serviceProvider._id, serviceProvider.name, req.user?.name,
+            { updatedFields: Object.keys(updates) }
+        );
 
         res.json(serviceProvider);
     } catch (error) {
@@ -52,11 +59,8 @@ exports.getAllServiceProviders = async (req, res) => {
 // Get a Service Provider by ID
 exports.getServiceProviderById = async (req, res) => {
     try {
-        const serviceProviderId = req.params.id;
-        const serviceProvider = await ServiceProvider.findById(serviceProviderId);
-        if (!serviceProvider) {
-            return res.status(404).json({ error: 'Service Provider not found' });
-        }
+        const serviceProvider = await ServiceProvider.findById(req.params.id);
+        if (!serviceProvider) return res.status(404).json({ error: 'Service Provider not found' });
         res.json(serviceProvider);
     } catch (error) {
         console.error('Error fetching service provider:', error);
@@ -67,11 +71,15 @@ exports.getServiceProviderById = async (req, res) => {
 // Delete a Service Provider
 exports.deleteServiceProvider = async (req, res) => {
     try {
-        const serviceProviderId = req.params.id;
-        const deletedServiceProvider = await ServiceProvider.findByIdAndDelete(serviceProviderId);
-        if (!deletedServiceProvider) {
-            return res.status(404).json({ error: 'Service Provider not found' });
-        }
+        const deletedServiceProvider = await ServiceProvider.findByIdAndDelete(req.params.id);
+        if (!deletedServiceProvider) return res.status(404).json({ error: 'Service Provider not found' });
+
+        await logActivity(
+            'service_provider_deleted',
+            `Service provider deleted: ${deletedServiceProvider.name}`,
+            'ServiceProvider', deletedServiceProvider._id, deletedServiceProvider.name, req.user?.name
+        );
+
         res.json({ message: 'Service Provider deleted successfully' });
     } catch (error) {
         console.error('Error deleting service provider:', error);

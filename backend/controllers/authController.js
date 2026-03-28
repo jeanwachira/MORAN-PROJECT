@@ -14,8 +14,8 @@ exports.signup = async(req, res) => {
             return res.status(400).json({message: "User with this email already exists"})
         }
 
-        const hashedPass = await bcrypt.hash(password, 10)
-        const newUser = await User.create({ name, email, password: hashedPass})
+        // Pass plain password — User model's pre('save') hook handles hashing
+        const newUser = await User.create({ name, email, password })
         
         const token = jwt.sign(
             {userId: newUser._id},
